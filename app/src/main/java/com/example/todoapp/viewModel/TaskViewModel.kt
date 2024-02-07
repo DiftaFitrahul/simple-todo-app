@@ -1,5 +1,6 @@
 package com.example.todoapp.viewModel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.example.todoapp.model.Task
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,9 @@ class TaskViewModel : ViewModel() {
 
     fun deleteTask(index: Int){
         _uiState.update { currentState ->
-            val newState = currentState.drop(index)
+            Log.d("Task Index Delete: ", index.toString())
+            val newState = currentState.filterIndexed { idx, task -> idx != index }
+            Log.d("Delete Task", newState.toString())
             newState
         }
     }

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +43,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +65,12 @@ import com.example.todoapp.model.Task
 import com.example.todoapp.ui.theme.TodoAppTheme
 import com.example.todoapp.viewModel.TaskViewModel
 
+enum class SubmitType(val value: String){
+    ADD("Add"),
+    UPDATE("Update")
+
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomePage(
@@ -72,11 +78,14 @@ fun HomePage(
     taskViewModel: TaskViewModel = viewModel<TaskViewModel>()
 ) {
     val listTaskState by taskViewModel.uiState.collectAsState()
+    var headerDialog by remember{ mutableStateOf("") }
+    var submitType by remember { mutableStateOf(SubmitType.ADD) }
     var showDialog by remember { mutableStateOf(false) }
     var titleTextfield by remember { mutableStateOf(value = "") }
     var descriptionTexfield by remember { mutableStateOf(value = "") }
     var titleError by remember { mutableStateOf(false) }
     var descriptionError by remember { mutableStateOf(false) }
+    var taskIndexSelected by remember { mutableIntStateOf(0) }
 
 
     Scaffold(
@@ -90,6 +99,8 @@ fun HomePage(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
+                submitType = SubmitType.ADD
+                headerDialog = "Add Task"
                 showDialog = true
             }) {
                 Icon(Icons.Default.Add, contentDescription = "Add")
@@ -106,23 +117,42 @@ fun HomePage(
             }
         }
         LazyColumn(contentPadding = it) {
-            items(listTaskState) { task ->
-                TaskItem(task = task)
+            items(listTaskState.size) { index ->
+                val task = listTaskState[index]
+                TaskItem(task = task, onClick = {
+                    headerDialog = "Update Task"
+                    submitType = SubmitType.UPDATE
+                    titleTextfield = task.title
+                    descriptionTexfield = task.description
+                    taskIndexSelected = index
+                    showDialog = true
+
+                },
+                    onDelete = {
+                        taskViewModel.deleteTask(index)
+                    }
+                    )
             }
         }
 
         if (showDialog) {
             DialogField(
-                header = "Create Data",
+                header = headerDialog,
                 title = titleTextfield,
                 errorTitle = titleError,
+                buttonYesTitle =submitType.value,
                 onTitleChange = { titleTextfield = it },
                 description = descriptionTexfield,
                 errorDescription = descriptionError,
                 onDescriptionChange = { descriptionTexfield = it },
                 // Dieksekusi ketika menekan layar diluar dialog
                 onDismisRequest = {
+
+                    titleError = false
+                    descriptionError = false
                     showDialog = false
+                    titleTextfield = ""
+                    descriptionTexfield = ""
                 },
                 onSubmit = {
                     if(titleTextfield.isEmpty() && descriptionTexfield.isEmpty()){
@@ -133,21 +163,37 @@ fun HomePage(
 
                     if (titleTextfield.isEmpty()) {
                         titleError = true
+                        descriptionError = false
                         return@DialogField
                     }
 
                     if (descriptionTexfield.isEmpty()) {
                         descriptionError = true
+                        titleError = false
                         return@DialogField
                     }
+
+
+
+                    titleError = false
+                    descriptionError = false
+                   if(submitType == SubmitType.ADD){
+                       taskViewModel.addTask(Task(title = titleTextfield, description =  descriptionTexfield))
+                   }else{
+                       taskViewModel.updateTask(index = taskIndexSelected,task = Task(title = titleTextfield, description =  descriptionTexfield))
+                   }
+                    showDialog = false
+                    titleTextfield = ""
+                    descriptionTexfield = ""
+
+                },
+                onCancel = {
 
                     titleError = false
                     descriptionError = false
                     showDialog = false
-
-                },
-                onCancel = {
-                    showDialog = false
+                    titleTextfield = ""
+                    descriptionTexfield = ""
                 }
             )
         }
@@ -158,9 +204,9 @@ fun HomePage(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TaskItem(modifier: Modifier = Modifier, task: Task) {
+fun TaskItem(modifier: Modifier = Modifier, task: Task, onClick : () -> Unit, onDelete : () -> Unit) {
     Card(
-        onClick = { /*TODO*/ },
+        onClick = onClick,
         elevation = CardDefaults.cardElevation(
             defaultElevation = 2.dp
         ),
@@ -179,7 +225,7 @@ fun TaskItem(modifier: Modifier = Modifier, task: Task) {
 
             }
             Divider(modifier = Modifier.width(15.dp))
-            IconButton(onClick = { /*TODO*/ }) {
+            IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = null,
@@ -196,6 +242,7 @@ fun DialogField(
     modifier: Modifier = Modifier,
     header: String,
     title: String,
+    buttonYesTitle: String,
     errorTitle: Boolean,
     onTitleChange: (String) -> Unit,
     description: String,
@@ -220,7 +267,9 @@ fun DialogField(
             contentAlignment = Alignment.Center
         ) {
             Column {
-                Text(text = header)
+                Text(text = header,  style = MaterialTheme.typography.titleLarge.copy(
+                    color = Color.Black
+                ))
                 Divider(
                     modifier = Modifier.height(20.dp),
                     color = Color.White
@@ -262,11 +311,12 @@ fun DialogField(
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            Log.d("Done di clic", "Haloooooooooooooooooooooooooo!!!")
+
                             focusManager.clearFocus()
                         }
                     ),
                     minLines = 3,
+                    maxLines = 3,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.Black,
                         unfocusedTextColor = Color.Black
@@ -282,7 +332,7 @@ fun DialogField(
                     horizontalArrangement = Arrangement.End
                 ) {
                     ElevatedButton(onClick = onSubmit, shape = RoundedCornerShape(12.dp)) {
-                        Text(text = "Add")
+                        Text(text = buttonYesTitle)
                     }
                     Divider(
                         color = Color.White,
